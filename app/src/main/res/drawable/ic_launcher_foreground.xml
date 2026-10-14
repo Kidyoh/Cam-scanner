@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A document with folded corner inside scanner viewfinder brackets -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- viewfinder corners -->
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M30,40 L30,30 L40,30 M68,30 L78,30 L78,40 M78,68 L78,78 L68,78 M40,78 L30,78 L30,68" />
+    <!-- page -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M42,36 L60,36 L68,44 L68,72 L42,72 Z" />
+    <path
+        android:fillColor="#FFB0BCFF"
+        android:pathData="M60,36 L60,44 L68,44 Z" />
+    <!-- text lines -->
+    <path
+        android:strokeColor="#FF3D5AFE"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M47,50 L63,50 M47,56 L63,56 M47,62 L57,62" />
+</vector>
