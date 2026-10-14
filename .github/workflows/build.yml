@@ -17,7 +17,31 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Build release APK
         run: ./gradlew assembleRelease --no-daemon
+      - name: Rename APKs
+        working-directory: app/build/outputs/apk/release
+        run: |
+          for f in app-*-release.apk; do
+            abi="${f#app-}"
+            mv "$f" "Scanly-${abi%-release.apk}.apk"
+          done
+          ls -lh *.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Scanly-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          name: Scanly-arm64-v8a
+          path: app/build/outputs/apk/release/Scanly-arm64-v8a.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Scanly-armeabi-v7a
+          path: app/build/outputs/apk/release/Scanly-armeabi-v7a.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Scanly-x86_64
+          path: app/build/outputs/apk/release/Scanly-x86_64.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Scanly-x86
+          path: app/build/outputs/apk/release/Scanly-x86.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Scanly-universal
+          path: app/build/outputs/apk/release/Scanly-universal.apk

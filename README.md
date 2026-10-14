@@ -43,11 +43,20 @@ no account, no page limits, and nothing leaves your phone unless you share it.
 Requirements: JDK 17+, Android SDK 35.
 
 ```bash
-./gradlew assembleDebug        # app/build/outputs/apk/debug/app-debug.apk
-./gradlew assembleRelease      # minified build, signed with the debug key
+./gradlew assembleDebug        # app/build/outputs/apk/debug/
+./gradlew assembleRelease      # app/build/outputs/apk/release/ (minified, signed with the debug key)
 ```
 
-Every push also builds a release APK on GitHub Actions — download it from the run's
+Builds produce one APK per CPU architecture, plus a universal one:
+
+| APK | For | Size |
+|---|---|---|
+| `arm64-v8a` | almost every phone from the last ~8 years | ~21 MB |
+| `armeabi-v7a` | older or budget 32-bit phones | ~17 MB |
+| `x86_64` / `x86` | emulators, Chromebooks | ~21 MB |
+| `universal` | any device (if unsure) | ~50 MB |
+
+Every push also builds these on GitHub Actions — download them from the run's
 **Artifacts** section.
 
 The scanner and QR reader use Google Play services, which download their ML models on

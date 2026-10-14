@@ -35,6 +35,16 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    // One APK per CPU architecture, so each download only carries the native ML Kit
+    // libraries its phone needs. The universal APK works everywhere as a fallback.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+            isUniversalApk = true
+        }
+    }
     buildFeatures {
         compose = true
     }
