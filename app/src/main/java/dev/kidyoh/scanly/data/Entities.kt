@@ -1,5 +1,6 @@
 package dev.kidyoh.scanly.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -18,6 +19,8 @@ data class DocumentEntity(
     val favorite: Boolean = false,
     /** Concatenated OCR text of every page, used for full-text search. */
     val searchText: String = "",
+    /** The copy auto-saved to Downloads/Scanly, so it can be updated in place after edits. */
+    val publicPdfUri: String? = null,
 )
 
 @Entity(
@@ -39,4 +42,7 @@ data class PageEntity(
     val imagePath: String,
     /** Serialized [dev.kidyoh.scanly.pdf.OcrResult]; null when OCR is disabled or failed. */
     val ocrJson: String? = null,
+    /** Unfiltered image, kept so filters can be changed or undone without quality loss. */
+    val originalPath: String? = null,
+    @ColumnInfo(defaultValue = "ORIGINAL") val filter: String = "ORIGINAL",
 )

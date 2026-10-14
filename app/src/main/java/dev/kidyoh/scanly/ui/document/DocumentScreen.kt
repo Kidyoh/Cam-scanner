@@ -36,6 +36,24 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.AddAPhoto
+import androidx.compose.material.icons.outlined.AutoFixHigh
+import androidx.compose.material.icons.outlined.Compress
+import androidx.compose.material.icons.outlined.Draw
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Print
+import androidx.compose.material.icons.outlined.SaveAlt
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import dev.kidyoh.scanly.util.PublicStorage
+import dev.kidyoh.scanly.util.printPdf
+import dev.kidyoh.scanly.util.rememberStorageAccess
+import coil.request.ImageRequest
+import coil.size.Size
+import java.text.DateFormat
+import java.util.Date
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -129,6 +147,11 @@ fun DocumentScreen(documentId: Long, onBack: () -> Unit, openDocument: (Long) ->
     var passwordAction by remember { mutableStateOf<PasswordAction?>(null) }
     var pendingPassword by remember { mutableStateOf<String?>(null) }
     var viewerStart by remember { mutableStateOf<Int?>(null) }
+    var saveSheet by remember { mutableStateOf(false) }
+    var filterPage by remember { mutableStateOf<PageEntity?>(null) }
+    var signPage by remember { mutableStateOf<PageEntity?>(null) }
+    val details by vm.details.collectAsState()
+    val withStorage = rememberStorageAccess()
 
     LaunchedEffect(vm) {
         vm.events.collect { e ->
@@ -138,12 +161,19 @@ fun DocumentScreen(documentId: Long, onBack: () -> Unit, openDocument: (Long) ->
                 is DocEvent.ShareImages -> context.shareImages(e.uris)
                 is DocEvent.OpenExternally -> context.openPdfExternally(e.uri)
                 is DocEvent.OpenDocument -> openDocument(e.id)
+                is DocEvent.Print -> context.printPdf(e.file, e.title)
                 DocEvent.Closed -> onBack()
             }
         }
     }
 
     val addPages = rememberDocumentScanner(settings.pageLimit) { vm.addPages(it) }
+    var pendingText by remember { mutableStateOf<String?>(null) }
+    val saveText = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        val t = pendingText
+        if (uri != null && t != null) vm.saveText(uri, t)
+        pendingText = null
+    }
     val saveAs = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
         if (uri != null) vm.exportTo(uri, pendingPassword)
         pendingPassword = null
@@ -179,13 +209,13 @@ fun DocumentScreen(documentId: Long, onBack: () -> Unit, openDocument: (Long) ->
                         IconButton(onClick = { menuOpen = true }) { Icon(Icons.Outlined.MoreVert, "More") }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             MenuItem("Open in PDF reader", Icons.AutoMirrored.Outlined.OpenInNew) { menuOpen = false; vm.openExternally() }
+                            MenuItem("Print", Icons.Outlined.Print) { menuOpen = false; vm.print() }
                             MenuItem("Share with password", Icons.Outlined.Lock) {
                                 menuOpen = false; passwordAction = PasswordAction.SHARE
                             }
-                            MenuItem("Save with password", Icons.Outlined.Lock) {
-                                menuOpen = false; passwordAction = PasswordAction.SAVE
-                            }
+                            MenuItem("Share compressed", Icons.Outlined.Compress) { menuOpen = false; vm.shareCompressed() }
                             MenuItem("Share pages as images", Icons.Outlined.Image) { menuOpen = false; vm.shareImages() }
+                            MenuItem("Details", Icons.Outlined.Info) { menuOpen = false; vm.showDetails() }
                             MenuItem("Duplicate", Icons.Outlined.FileCopy) { menuOpen = false; vm.duplicate() }
                             MenuItem("Rename", Icons.Outlined.Edit) { menuOpen = false; renaming = true }
                             HorizontalDivider()
@@ -199,7 +229,7 @@ fun DocumentScreen(documentId: Long, onBack: () -> Unit, openDocument: (Long) ->
             BottomAppBar {
                 BottomAction("Add pages", Icons.Outlined.AddAPhoto, Modifier.weight(1f)) { addPages() }
                 BottomAction("Text", Icons.AutoMirrored.Outlined.TextSnippet, Modifier.weight(1f)) { vm.extractText() }
-                BottomAction("Save", Icons.Outlined.Download, Modifier.weight(1f)) { saveAs.launch(vm.suggestedFileName()) }
+                BottomAction("Save", Icons.Outlined.Download, Modifier.weight(1f)) { saveSheet = true }
                 BottomAction("Share", Icons.Outlined.Share, Modifier.weight(1f)) { vm.share() }
             }
         },
@@ -226,6 +256,9 @@ fun DocumentScreen(documentId: Long, onBack: () -> Unit, openDocument: (Long) ->
                     count = pages.size,
                     onOpen = { viewerStart = index },
                     onRotate = { vm.rotatePage(page.id) },
+                    onFilter = { filterPage = page },
+                    onSign = { signPage = page },
+                    onSaveImage = { withStorage { vm.saveToGallery(listOf(page.id)) } },
                     onUp = { vm.movePage(page.id, -1) },
                     onDown = { vm.movePage(page.id, 1) },
                     onDelete = { vm.deletePage(page.id) },
@@ -259,6 +292,14 @@ fun DocumentScreen(documentId: Long, onBack: () -> Unit, openDocument: (Long) ->
                         Spacer(Modifier.padding(4.dp))
                         Text("Share")
                     }
+                    OutlinedButton(onClick = {
+                        pendingText = t
+                        saveText.launch(vm.suggestedFileName().removeSuffix(".pdf") + ".txt")
+                    }) {
+                        Icon(Icons.Outlined.Description, null)
+                        Spacer(Modifier.padding(4.dp))
+                        Text(".txt")
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
                 SelectionContainer {
@@ -272,6 +313,49 @@ fun DocumentScreen(documentId: Long, onBack: () -> Unit, openDocument: (Long) ->
         }
     }
 
+    if (saveSheet) {
+        SaveSheet(
+            pageCount = pages.size,
+            onDismiss = { saveSheet = false },
+            onDownloads = { saveSheet = false; withStorage { vm.saveToDownloads() } },
+            onGallery = { saveSheet = false; withStorage { vm.saveToGallery() } },
+            onPick = { saveSheet = false; saveAs.launch(vm.suggestedFileName()) },
+            onPassword = { saveSheet = false; passwordAction = PasswordAction.SAVE },
+        )
+    }
+    filterPage?.let { page ->
+        FilterSheet(
+            page = pages.firstOrNull { it.id == page.id } ?: page,
+            pageCount = pages.size,
+            loadPreviews = vm::filterPreviews,
+            onDismiss = { filterPage = null },
+        ) { filter, all ->
+            filterPage = null
+            vm.applyFilter(page.id, filter, all)
+        }
+    }
+    signPage?.let { page ->
+        SignatureFlow(page = page, saved = remember { vm.savedSignature() }, onDismiss = { signPage = null }) { sig, keep, l, t, w ->
+            signPage = null
+            vm.sign(page.id, sig, keep, l, t, w)
+        }
+    }
+    details?.let { d ->
+        ModalBottomSheet(onDismissRequest = vm::dismissDetails) {
+            Column(Modifier.padding(bottom = 24.dp)) {
+                Text("Details", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 20.dp))
+                val fmt = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+                DetailRow("Pages", d.pages.toString())
+                DetailRow("File size", formatSize(d.fileSize))
+                DetailRow("Image resolution", d.resolution ?: "—")
+                DetailRow("Searchable text", if (d.words > 0) "${d.words} words · ${d.characters} characters" else "None")
+                DetailRow("Filters", d.filters.joinToString())
+                DetailRow("Created", fmt.format(Date(d.createdAt)))
+                DetailRow("Modified", fmt.format(Date(d.updatedAt)))
+                DetailRow("Saved on phone", d.publicCopy ?: "Only inside Scanly (use Save to copy it out)")
+            }
+        }
+    }
     if (renaming) {
         TextInputDialog("Rename", doc?.title.orEmpty(), onDismiss = { renaming = false }) {
             vm.rename(it); renaming = false
@@ -330,35 +414,62 @@ private fun PageCard(
     count: Int,
     onOpen: () -> Unit,
     onRotate: () -> Unit,
+    onFilter: () -> Unit,
+    onSign: () -> Unit,
+    onSaveImage: () -> Unit,
     onUp: () -> Unit,
     onDown: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var confirm by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }
+    val filter = dev.kidyoh.scanly.pdf.PageFilter.of(page.filter)
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
-        AsyncImage(
-            model = File(page.imagePath),
-            contentDescription = "Page ${index + 1}",
-            contentScale = ContentScale.FillWidth,
-            modifier = Modifier.fillMaxWidth().background(Color.White).clickable(onClick = onOpen),
-        )
+        Box {
+            AsyncImage(
+                model = File(page.imagePath),
+                contentDescription = "Page ${index + 1}",
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier.fillMaxWidth().background(Color.White).clickable(onClick = onOpen),
+            )
+            if (filter != dev.kidyoh.scanly.pdf.PageFilter.ORIGINAL) {
+                Text(
+                    filter.label,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .background(Color.Black.copy(alpha = 0.6f), MaterialTheme.shapes.small)
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+            }
+        }
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "Page ${index + 1} of $count",
+                "${index + 1} / $count",
                 style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(start = 8.dp).weight(1f),
+                modifier = Modifier.padding(start = 12.dp).weight(1f),
             )
+            IconButton(onClick = onFilter) { Icon(Icons.Outlined.AutoFixHigh, "Filters") }
+            IconButton(onClick = onSign) { Icon(Icons.Outlined.Draw, "Sign") }
             IconButton(onClick = onRotate) { Icon(Icons.AutoMirrored.Outlined.RotateRight, "Rotate") }
-            IconButton(onClick = onUp, enabled = index > 0) { Icon(Icons.Outlined.ArrowUpward, "Move up") }
-            IconButton(onClick = onDown, enabled = index < count - 1) { Icon(Icons.Outlined.ArrowDownward, "Move down") }
-            IconButton(onClick = { confirm = true }) { Icon(Icons.Outlined.Delete, "Delete page") }
+            Box {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "Page options") }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    MenuItem("Save image to Gallery", Icons.Outlined.PhotoLibrary) { menu = false; onSaveImage() }
+                    if (index > 0) MenuItem("Move up", Icons.Outlined.ArrowUpward) { menu = false; onUp() }
+                    if (index < count - 1) MenuItem("Move down", Icons.Outlined.ArrowDownward) { menu = false; onDown() }
+                    MenuItem("Delete page", Icons.Outlined.Delete) { menu = false; confirm = true }
+                }
+            }
         }
     }
     if (confirm) {
@@ -370,6 +481,52 @@ private fun PageCard(
             onConfirm = { confirm = false; onDelete() },
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SaveSheet(
+    pageCount: Int,
+    onDismiss: () -> Unit,
+    onDownloads: () -> Unit,
+    onGallery: () -> Unit,
+    onPick: () -> Unit,
+    onPassword: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.padding(bottom = 24.dp)) {
+            Text("Save to your phone", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 20.dp))
+            SaveOption(Icons.Outlined.SaveAlt, "PDF to Downloads", "Files app → ${PublicStorage.pdfFolder()}", onDownloads)
+            SaveOption(
+                Icons.Outlined.PhotoLibrary,
+                if (pageCount == 1) "Image to Gallery" else "All $pageCount pages to Gallery",
+                "Photos app → ${PublicStorage.imageFolder()} (JPG)",
+                onGallery,
+            )
+            SaveOption(Icons.Outlined.FolderOpen, "PDF to a folder…", "Choose any folder, SD card, Google Drive…", onPick)
+            SaveOption(Icons.Outlined.Lock, "Password-protected PDF…", "AES-encrypted, needs a password to open", onPassword)
+        }
+    }
+}
+
+@Composable
+private fun SaveOption(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = { Text(subtitle) },
+        leadingContent = { Icon(icon, null, tint = MaterialTheme.colorScheme.primary) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.clickable(onClick = onClick),
+    )
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    ListItem(
+        headlineContent = { Text(value) },
+        overlineContent = { Text(label) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+    )
 }
 
 /** Full-screen swipeable page viewer with pinch-to-zoom and double-tap zoom. */
@@ -397,8 +554,11 @@ private fun PageViewer(pages: List<PageEntity>, start: Int, onDismiss: () -> Uni
 private fun ZoomableImage(file: File) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    val context = LocalContext.current
+    // Load at full resolution so zooming in shows real detail instead of a blurry upscale.
+    val request = remember(file) { ImageRequest.Builder(context).data(file).size(Size.ORIGINAL).build() }
     AsyncImage(
-        model = file,
+        model = request,
         contentDescription = null,
         contentScale = ContentScale.Fit,
         modifier = Modifier

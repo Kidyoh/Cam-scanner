@@ -31,14 +31,20 @@ object PdfBuilder {
         "/system/fonts/DroidSans.ttf",
     )
 
-    fun build(pages: List<PdfPageInput>, out: File, pageSize: PageSize, jpegQuality: Float) {
+    fun build(
+        pages: List<PdfPageInput>,
+        out: File,
+        pageSize: PageSize,
+        jpegQuality: Float,
+        maxImageSide: Int = Int.MAX_VALUE,
+    ) {
         out.parentFile?.mkdirs()
         val tmp = File(out.parentFile, out.name + ".tmp")
         try {
-            write(pages, tmp, pageSize, jpegQuality, useSystemFont = true)
+            write(pages, tmp, pageSize, jpegQuality, maxImageSide, useSystemFont = true)
         } catch (e: Exception) {
             // Some devices ship fonts PDFBox can't embed; the standard font always works.
-            write(pages, tmp, pageSize, jpegQuality, useSystemFont = false)
+            write(pages, tmp, pageSize, jpegQuality, maxImageSide, useSystemFont = false)
         }
         if (!tmp.renameTo(out)) {
             tmp.copyTo(out, overwrite = true)
@@ -46,18 +52,35 @@ object PdfBuilder {
         }
     }
 
-    private fun write(pages: List<PdfPageInput>, dest: File, pageSize: PageSize, quality: Float, useSystemFont: Boolean) {
+    private fun write(
+        pages: List<PdfPageInput>,
+        dest: File,
+        pageSize: PageSize,
+        quality: Float,
+        maxSide: Int,
+        useSystemFont: Boolean,
+    ) {
         PDDocument().use { doc ->
             val font = if (useSystemFont) loadFont(doc) else PDType1Font.HELVETICA
-            for (input in pages) addPage(doc, input, pageSize, quality, font)
+            for (input in pages) addPage(doc, input, pageSize, quality, maxSide, font)
             doc.documentInformation.creator = "Scanly"
             doc.documentInformation.producer = "Scanly"
             doc.save(dest)
         }
     }
 
-    private fun addPage(doc: PDDocument, input: PdfPageInput, pageSize: PageSize, quality: Float, font: PDFont) {
-        val bmp = BitmapFactory.decodeFile(input.image.absolutePath) ?: return
+    private fun addPage(
+        doc: PDDocument,
+        input: PdfPageInput,
+        pageSize: PageSize,
+        quality: Float,
+        maxSide: Int,
+        font: PDFont,
+    ) {
+        val decoded = BitmapFactory.decodeFile(input.image.absolutePath) ?: return
+        // Downscaling only changes how many pixels are embedded; OCR coordinates are relative.
+        val bmp = ImageUtils.scaleDown(decoded, maxSide)
+        if (bmp !== decoded) decoded.recycle()
         val image = JPEGFactory.createFromImage(doc, bmp, quality)
         val iw = bmp.width.toFloat()
         val ih = bmp.height.toFloat()

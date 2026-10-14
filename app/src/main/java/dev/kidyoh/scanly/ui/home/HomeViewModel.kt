@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dev.kidyoh.scanly.ScanlyApp
 import dev.kidyoh.scanly.data.DocumentEntity
 import dev.kidyoh.scanly.data.Progress
+import dev.kidyoh.scanly.data.SortOrder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +41,7 @@ class HomeViewModel(private val app: ScanlyApp) : ViewModel() {
     val documents: StateFlow<List<DocumentEntity>?> =
         combine(query.debounce(150), favoritesOnly) { q, f -> q to f }
             .flatMapLatest { (q, f) -> repo.observeDocuments(q, f) }
+            .combine(settings) { docs, s -> sort(docs, s.sortOrder) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     init {
@@ -53,6 +55,20 @@ class HomeViewModel(private val app: ScanlyApp) : ViewModel() {
 
     fun onScanned(uris: List<Uri>) = work("Processing scan…") { p ->
         _events.send(HomeEvent.Open(repo.createFromImages(uris, progress = p)))
+    }
+
+    fun onIdCardScanned(uris: List<Uri>) = work("Creating ID card page…") { p ->
+        _events.send(HomeEvent.Open(repo.createIdCard(uris, p)))
+    }
+
+    fun setSort(order: SortOrder) = app.settings.update { it.copy(sortOrder = order) }
+
+    private fun sort(docs: List<DocumentEntity>, order: SortOrder) = when (order) {
+        SortOrder.NEWEST -> docs.sortedByDescending { it.updatedAt }
+        SortOrder.OLDEST -> docs.sortedBy { it.createdAt }
+        SortOrder.NAME -> docs.sortedBy { it.title.lowercase() }
+        SortOrder.SIZE -> docs.sortedByDescending { it.fileSize }
+        SortOrder.PAGES -> docs.sortedByDescending { it.pageCount }
     }
 
     fun importImages(uris: List<Uri>) = work("Importing images…") { p ->

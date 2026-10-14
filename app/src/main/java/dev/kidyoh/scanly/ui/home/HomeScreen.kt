@@ -30,6 +30,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items as rowItems
+import androidx.compose.material.icons.automirrored.outlined.Sort
+import androidx.compose.material.icons.outlined.Badge
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.ui.graphics.vector.ImageVector
+import dev.kidyoh.scanly.data.SortOrder
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -95,7 +103,9 @@ import dev.kidyoh.scanly.data.DocumentEntity
 import dev.kidyoh.scanly.ui.components.BusyOverlay
 import dev.kidyoh.scanly.ui.components.ConfirmDialog
 import dev.kidyoh.scanly.ui.components.TextInputDialog
+import dev.kidyoh.scanly.util.PublicStorage
 import dev.kidyoh.scanly.util.formatSize
+import dev.kidyoh.scanly.util.rememberStorageAccess
 import dev.kidyoh.scanly.util.rememberDocumentScanner
 import java.io.File
 import java.text.DateFormat
@@ -131,6 +141,8 @@ fun HomeScreen(openDocument: (Long) -> Unit, openSettings: () -> Unit) {
     }
 
     val scan = rememberDocumentScanner(settings.pageLimit) { vm.onScanned(it) }
+    val scanIdCard = rememberDocumentScanner(pageLimit = 2) { vm.onIdCardScanned(it) }
+    var sortMenu by remember { mutableStateOf(false) }
     val pickPdf = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let { vm.importPdf(it) }
     }
@@ -146,6 +158,12 @@ fun HomeScreen(openDocument: (Long) -> Unit, openSettings: () -> Unit) {
     }
 
     BackHandler(enabled = selection.isNotEmpty()) { vm.clearSelection() }
+
+    // Android 8–9 only: ask once for storage so auto-save to Downloads/Gallery works.
+    val withStorage = rememberStorageAccess()
+    LaunchedEffect(Unit) {
+        if ((settings.autoSavePdf || settings.autoSaveImages) && PublicStorage.needsPermission(context)) withStorage {}
+    }
 
     Scaffold(
         topBar = {
@@ -172,25 +190,23 @@ fun HomeScreen(openDocument: (Long) -> Unit, openSettings: () -> Unit) {
                         TopAppBar(
                             title = { Text("Scanly", fontWeight = FontWeight.Bold) },
                             actions = {
-                                IconButton(onClick = { scanQr() }) { Icon(Icons.Outlined.QrCodeScanner, "Scan QR code") }
+                                Box {
+                                    IconButton(onClick = { sortMenu = true }) { Icon(Icons.AutoMirrored.Outlined.Sort, "Sort") }
+                                    DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                                        SortOrder.entries.forEach { order ->
+                                            DropdownMenuItem(
+                                                text = { Text(order.label) },
+                                                leadingIcon = {
+                                                    if (settings.sortOrder == order) Icon(Icons.Outlined.Check, null)
+                                                },
+                                                onClick = { sortMenu = false; vm.setSort(order) },
+                                            )
+                                        }
+                                    }
+                                }
                                 Box {
                                     IconButton(onClick = { menuOpen = true }) { Icon(Icons.Outlined.MoreVert, "More") }
                                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                        DropdownMenuItem(
-                                            text = { Text("Import PDF") },
-                                            leadingIcon = { Icon(Icons.Outlined.PictureAsPdf, null) },
-                                            onClick = { menuOpen = false; pickPdf.launch(arrayOf("application/pdf")) },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("Import photos") },
-                                            leadingIcon = { Icon(Icons.Outlined.Image, null) },
-                                            onClick = {
-                                                menuOpen = false
-                                                pickImages.launch(
-                                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                                                )
-                                            },
-                                        )
                                         DropdownMenuItem(
                                             text = { Text("Settings") },
                                             leadingIcon = { Icon(Icons.Outlined.Settings, null) },
@@ -230,6 +246,25 @@ fun HomeScreen(openDocument: (Long) -> Unit, openSettings: () -> Unit) {
                                 leadingIcon = { Icon(Icons.Filled.Star, null, Modifier.size(18.dp)) },
                             )
                         }
+                        if (query.isEmpty()) {
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.padding(bottom = 8.dp),
+                            ) {
+                                val tools = listOf(
+                                    Tool("ID card", "Front + back on one page", Icons.Outlined.Badge) { scanIdCard() },
+                                    Tool("Photos", "Import from gallery", Icons.Outlined.Image) {
+                                        pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                    },
+                                    Tool("PDF", "Import & edit a PDF", Icons.Outlined.PictureAsPdf) {
+                                        pickPdf.launch(arrayOf("application/pdf"))
+                                    },
+                                    Tool("QR code", "Scan QR & barcodes", Icons.Outlined.QrCodeScanner) { scanQr() },
+                                )
+                                rowItems(tools) { ToolCard(it) }
+                            }
+                        }
                     }
                 }
             }
@@ -255,7 +290,7 @@ fun HomeScreen(openDocument: (Long) -> Unit, openSettings: () -> Unit) {
                 )
                 list.isEmpty() -> EmptyState(
                     title = "Scan your first document",
-                    body = "Tap Scan. Edges are detected automatically, pages are flattened and cleaned, and text is recognised so every PDF is searchable.",
+                    body = "Tap Scan. Edges are detected automatically, pages are flattened and cleaned, and text is recognised so every PDF is searchable. PDFs are saved to Downloads/Scanly.",
                 )
                 else -> LazyVerticalGrid(
                     columns = GridCells.Adaptive(156.dp),
@@ -494,4 +529,35 @@ private fun QrResultDialog(barcode: Barcode, onDismiss: () -> Unit) {
             }) { Text(if (wifi != null) "Copy password" else "Copy") }
         },
     )
+}
+
+private class Tool(val title: String, val subtitle: String, val icon: ImageVector, val onClick: () -> Unit)
+
+@Composable
+private fun ToolCard(tool: Tool) {
+    ElevatedCard(onClick = tool.onClick) {
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                tool.icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                    .padding(7.dp),
+            )
+            Spacer(Modifier.size(10.dp))
+            Column {
+                Text(tool.title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    tool.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
 }

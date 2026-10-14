@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import dev.kidyoh.scanly.ScanlyApp
 import dev.kidyoh.scanly.data.PageSize
 import dev.kidyoh.scanly.data.Quality
+import dev.kidyoh.scanly.util.PublicStorage
+import dev.kidyoh.scanly.util.rememberStorageAccess
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,6 +38,7 @@ import kotlin.math.roundToInt
 fun SettingsScreen(onBack: () -> Unit) {
     val store = (LocalContext.current.applicationContext as ScanlyApp).settings
     val s by store.settings.collectAsState()
+    val withStorage = rememberStorageAccess()
 
     Scaffold(
         topBar = {
@@ -48,6 +51,31 @@ fun SettingsScreen(onBack: () -> Unit) {
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
+            Section("Saving")
+            ListItem(
+                headlineContent = { Text("Auto-save PDFs to Downloads") },
+                supportingContent = {
+                    Text("Keeps an up-to-date copy of every document in ${PublicStorage.pdfFolder()}, visible in your Files app.")
+                },
+                trailingContent = {
+                    Switch(checked = s.autoSavePdf, onCheckedChange = { on ->
+                        if (on) withStorage { store.update { it.copy(autoSavePdf = true) } } else store.update { it.copy(autoSavePdf = false) }
+                    })
+                },
+            )
+            ListItem(
+                headlineContent = { Text("Auto-save scans to Gallery") },
+                supportingContent = {
+                    Text("Every scanned page is also saved as a JPG in ${PublicStorage.imageFolder()}.")
+                },
+                trailingContent = {
+                    Switch(checked = s.autoSaveImages, onCheckedChange = { on ->
+                        if (on) withStorage { store.update { it.copy(autoSaveImages = true) } } else store.update { it.copy(autoSaveImages = false) }
+                    })
+                },
+            )
+            HorizontalDivider()
+
             Section("PDF page size")
             PageSize.entries.forEach { size ->
                 ListItem(
@@ -60,11 +88,14 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
             HorizontalDivider()
 
-            Section("Image quality")
+            Section("Image quality & detail")
             Quality.entries.forEach { q ->
                 ListItem(
                     headlineContent = { Text(q.label) },
-                    supportingContent = { Text("Up to ${q.maxSide}px · JPEG ${(q.jpegQuality * 100).roundToInt()}%") },
+                    supportingContent = {
+                        val px = if (q == Quality.MAXIMUM) "Full resolution" else "Up to ${q.maxSide}px"
+                        Text("$px · JPEG ${(q.jpegQuality * 100).roundToInt()}%")
+                    },
                     leadingContent = { RadioButton(selected = s.quality == q, onClick = null) },
                     modifier = Modifier.selectable(selected = s.quality == q) {
                         store.update { it.copy(quality = q) }

@@ -15,10 +15,21 @@ object ImageUtils {
      * Decodes [uri], honours EXIF orientation, downsamples so the longest side is at most
      * [maxSide] and writes a clean JPEG to [dest].
      */
-    fun normalize(context: Context, uri: Uri, dest: File, maxSide: Int, quality: Float): Boolean {
+    fun normalize(context: Context, uri: Uri, dest: File, maxSide: Int, quality: Float): Boolean =
+        try {
+            normalizeOrThrow(context, uri, dest, maxSide, quality)
+        } catch (e: java.io.IOException) {
+            false
+        } catch (e: SecurityException) {
+            false
+        }
+
+    private fun normalizeOrThrow(context: Context, uri: Uri, dest: File, maxSide: Int, quality: Float): Boolean {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return false
+        // With inJustDecodeBounds the decoder returns null by design; only the stream can be missing.
+        val stream = resolver.openInputStream(uri) ?: return false
+        stream.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return false
 
         var sample = 1

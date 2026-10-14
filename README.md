@@ -9,40 +9,57 @@ no account, no page limits, and nothing leaves your phone unless you share it.
 **Scanning**
 - Live edge detection with auto-capture (Google ML Kit document scanner, on-device)
 - Automatic perspective correction and cropping, with manual corner adjustment
-- Filters: colour, greyscale, black & white; shadow, stain and finger removal
+- Shadow, stain and finger removal
 - Multi-page scanning (up to 100 pages per scan, configurable)
-- Import from the gallery, import existing PDFs, or "Share to Scanly" from any app
+- **ID card mode**: scan front and back onto one A4 page at true size, ready to print
+- Import photos from the gallery, import existing PDFs, or "Share to Scanly" from any app
+
+**Saving: your files, where you can see them**
+- Every PDF is auto-saved to **Download/Scanly** (visible in the Files app) and kept up to date as you edit
+- Save page images to the **Gallery** (Pictures/Scanly), all at once or page by page
+- Optional: auto-save every scanned page to the Gallery
+- Save to any folder, SD card or cloud drive through the system file picker
+- **Password-protected** PDFs (AES-128)
+
+**Image detail and filters**
+- Quality presets up to **Maximum detail** (full camera resolution, JPEG 95%)
+- Filters with live previews: Magic colour (white-balanced paper), Enhance, Greyscale,
+  Black & white (adaptive threshold that ignores shadows), Lighten
+- Filters are non-destructive: the original is always kept, so you can switch or undo anytime
+- Apply a filter to one page or the whole document
+- Full-screen viewer loads pages at full resolution, so pinch-zoom shows real detail
 
 **Smart PDFs**
-- Every scan becomes a PDF with an invisible OCR text layer, so it's **searchable**
-  and text can be selected and copied in any PDF reader
+- Every scan gets an invisible OCR text layer, so the PDF is **searchable** and text can
+  be selected and copied in any PDF reader
 - Documents are auto-named from the first line of text on the page
-- Page size: fit-to-image, A4 or US Letter; three quality/size presets
-- **Password protection** (AES-128) when saving or sharing
+- Page size: fit-to-image, A4 or US Letter
+
+**Editing**
+- **Sign documents**: draw a signature (black, blue or red), save it for reuse, then drag and pinch to place it
+- Add pages to an existing document
+- Rotate, reorder or remove individual pages
 
 **Library**
 - Full-text search across titles *and* the text inside every scan, with highlighted matches
+- Sort by date, name, size or page count
 - Favourites, rename, duplicate, delete
 - Multi-select to **merge** documents or bulk-delete
+- Document details: pages, size, resolution, word count, filters, where it's saved
 
-**Editing**
-- Add pages to an existing document
-- Rotate, reorder or remove individual pages
-- Full-screen viewer with swipe between pages and pinch/double-tap zoom
-
-**Extras**
-- Extract text (OCR) → copy or share
+**Sharing and more**
+- Share as PDF, as page images, password-protected or **compressed** for email
+- **Print** to any printer
+- Extract text (OCR), then copy, share or save as .txt
 - QR / barcode scanner (links, Wi-Fi passwords, contacts, …)
-- Save to any folder or cloud drive via the system file picker
-- Share as PDF or as page images
 - Material You dynamic colour and dark mode
-- No runtime permissions required
 
 ## Building
 
 Requirements: JDK 17+, Android SDK 35.
 
 ```bash
+./gradlew testDebugUnitTest    # 25 Robolectric tests: saving, filters, PDF/OCR layer, encryption, migration
 ./gradlew assembleDebug        # app/build/outputs/apk/debug/
 ./gradlew assembleRelease      # app/build/outputs/apk/release/ (minified, signed with the debug key)
 ```

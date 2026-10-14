@@ -12,16 +12,30 @@ enum class PageSize(val label: String) {
 }
 
 enum class Quality(val label: String, val maxSide: Int, val jpegQuality: Float) {
-    HIGH("High (best for printing)", 3000, 0.92f),
-    BALANCED("Balanced", 2200, 0.82f),
+    MAXIMUM("Maximum detail (full camera resolution)", 8000, 0.95f),
+    HIGH("High (great for printing)", 3000, 0.90f),
+    BALANCED("Balanced", 2200, 0.80f),
     COMPACT("Compact (smallest files)", 1500, 0.65f),
+}
+
+enum class SortOrder(val label: String) {
+    NEWEST("Recently modified"),
+    OLDEST("Oldest first"),
+    NAME("Name (A–Z)"),
+    SIZE("Largest first"),
+    PAGES("Most pages"),
 }
 
 data class AppSettings(
     val pageSize: PageSize = PageSize.AUTO,
-    val quality: Quality = Quality.BALANCED,
+    val quality: Quality = Quality.HIGH,
     val ocrEnabled: Boolean = true,
     val pageLimit: Int = 50,
+    /** Keep an up-to-date copy of every PDF in Downloads/Scanly. */
+    val autoSavePdf: Boolean = true,
+    /** Also save every scanned page to the gallery (Pictures/Scanly). */
+    val autoSaveImages: Boolean = false,
+    val sortOrder: SortOrder = SortOrder.NEWEST,
 )
 
 class SettingsStore(context: Context) {
@@ -29,12 +43,18 @@ class SettingsStore(context: Context) {
     private val _settings = MutableStateFlow(read())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
-    private fun read() = AppSettings(
-        pageSize = enumValueOrDefault(prefs.getString("pageSize", null), PageSize.AUTO),
-        quality = enumValueOrDefault(prefs.getString("quality", null), Quality.BALANCED),
-        ocrEnabled = prefs.getBoolean("ocr", true),
-        pageLimit = prefs.getInt("pageLimit", 50),
-    )
+    private fun read(): AppSettings {
+        val d = AppSettings()
+        return AppSettings(
+            pageSize = enumValueOrDefault(prefs.getString("pageSize", null), d.pageSize),
+            quality = enumValueOrDefault(prefs.getString("quality", null), d.quality),
+            ocrEnabled = prefs.getBoolean("ocr", d.ocrEnabled),
+            pageLimit = prefs.getInt("pageLimit", d.pageLimit),
+            autoSavePdf = prefs.getBoolean("autoSavePdf", d.autoSavePdf),
+            autoSaveImages = prefs.getBoolean("autoSaveImages", d.autoSaveImages),
+            sortOrder = enumValueOrDefault(prefs.getString("sortOrder", null), d.sortOrder),
+        )
+    }
 
     fun update(transform: (AppSettings) -> AppSettings) {
         val new = transform(_settings.value)
@@ -43,6 +63,9 @@ class SettingsStore(context: Context) {
             .putString("quality", new.quality.name)
             .putBoolean("ocr", new.ocrEnabled)
             .putInt("pageLimit", new.pageLimit)
+            .putBoolean("autoSavePdf", new.autoSavePdf)
+            .putBoolean("autoSaveImages", new.autoSaveImages)
+            .putString("sortOrder", new.sortOrder.name)
             .apply()
         _settings.value = new
     }

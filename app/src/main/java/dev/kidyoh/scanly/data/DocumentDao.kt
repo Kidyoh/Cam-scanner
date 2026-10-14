@@ -13,7 +13,8 @@ interface DocumentDao {
     @Query(
         """
         SELECT * FROM documents
-        WHERE (:query = '' OR title LIKE '%' || :query || '%' OR searchText LIKE '%' || :query || '%')
+        WHERE pageCount > 0
+          AND (:query = '' OR title LIKE '%' || :query || '%' OR searchText LIKE '%' || :query || '%')
           AND (:favoritesOnly = 0 OR favorite = 1)
         ORDER BY updatedAt DESC
         """,
